@@ -4,7 +4,7 @@ This Go library connects to the speedata api (still in closed beta) and gets PDF
 
 ## Example usage
 
-```xml
+```go
 package main
 
 import (

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
@@ -18,18 +20,10 @@ func basicAuth(username string) string {
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
-// Endpoint is the starting point for all
-// publishing activity
-type Endpoint struct {
-	location string
-	password string
-	client   *http.Client
-}
-
 // PublishRequest is
 type PublishRequest struct {
 	endpoint *Endpoint
-	Files    []PublishFile
+	Files    []PublishFile `json:"files"`
 }
 
 // AttachFile adds a file to the PublishRequest
@@ -46,8 +40,8 @@ func (p *PublishRequest) AttachFile(pathToFile string) error {
 
 // PublishFile is a file for the publishing request
 type PublishFile struct {
-	Filename string
-	Contents []byte
+	Filename string `json:"filename"`
+	Contents []byte `json:"contents"`
 }
 
 // PublishResponse holds the id to the publishing process
@@ -58,51 +52,35 @@ type PublishResponse struct {
 
 // GetPDF gets the PDF from the server. In case of an error, the byte slice might not be meaningful.
 // Otherwise it holds the PDF file.
-func (p *PublishResponse) GetPDF() ([]byte, error) {
+func (p *PublishResponse) GetPDF(w io.Writer) error {
 	loc := p.endpoint.location + "/pdf/" + p.Id
 	req, err := http.NewRequest("GET", loc, nil)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	req.Header.Add("Authorization", "Basic "+p.endpoint.password)
 
 	resp, err := p.endpoint.client.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	b, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return b, nil
-}
-
-// NewEndpoint starts a publishing session.
-func NewEndpoint(authstring string, location string) (*Endpoint, error) {
-	ep := &Endpoint{
-		client:   &http.Client{},
-		location: location + API_PREFIX,
-		password: basicAuth(authstring),
-	}
-
-	return ep, nil
+	_, err = io.Copy(w, resp.Body)
+	return err
 }
 
 // Publish sends data to the server.
 func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 	var p PublishResponse
-
 	loc := e.location + "/publish"
-
 	b, err := json.Marshal(data)
 	if err != nil {
 		return p, err
 	}
-
 	br := bytes.NewReader(b)
 
 	req, err := http.NewRequest("POST", loc, br)
 	if err != nil {
+		fmt.Println("new request failed")
 		return p, err
 	}
 	req.Header.Add("Authorization", "Basic "+e.password)
@@ -116,6 +94,16 @@ func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 	buf, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return p, err
+	}
+
+	if resp.StatusCode != 200 {
+		fmt.Println(string(buf))
+		var ae APIError
+		err = json.Unmarshal(buf, &ae)
+		if err != nil {
+			return p, err
+		}
+		return p, ae
 	}
 
 	err = json.Unmarshal(buf, &p)
