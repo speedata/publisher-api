@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -48,6 +49,72 @@ type PublishFile struct {
 type PublishResponse struct {
 	endpoint *Endpoint
 	Id       string
+}
+
+type Errormessage struct {
+	Code  int    `json:"code"`
+	Error string `json:"error"`
+}
+
+type ProcessStatus struct {
+	Finished      *time.Time
+	Errors        int
+	Errormessages []Errormessage
+}
+
+func (p *PublishResponse) Status() (*ProcessStatus, error) {
+	loc := p.endpoint.location + "/status/" + p.Id
+	req, err := http.NewRequest("GET", loc, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Authorization", "Basic "+p.endpoint.password)
+
+	resp, err := p.endpoint.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	buf, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ps := &ProcessStatus{}
+	err = json.Unmarshal(buf, ps)
+	if err != nil {
+		return nil, err
+	}
+	return ps, nil
+}
+
+// Wait for the publishing process to finish. Return an error if something is wrong with the request.
+// If there is an error during the publishing run but the request itself is without errors, the
+// error is nil, but the returned publishing status has the numbers of errors et.
+func (p *PublishResponse) Wait() (*ProcessStatus, error) {
+	loc := p.endpoint.location + "/wait/" + p.Id
+	req, err := http.NewRequest("GET", loc, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Add("Authorization", "Basic "+p.endpoint.password)
+
+	resp, err := p.endpoint.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	buf, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ps := &ProcessStatus{}
+	err = json.Unmarshal(buf, ps)
+	if err != nil {
+		return nil, err
+	}
+	return ps, nil
 }
 
 // GetPDF gets the PDF from the server. In case of an error, the byte slice might not be meaningful.
@@ -96,7 +163,7 @@ func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 		return p, err
 	}
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != 201 {
 		fmt.Println(string(buf))
 		var ae APIError
 		err = json.Unmarshal(buf, &ae)

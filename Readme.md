@@ -9,28 +9,18 @@ package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
+	"time"
 
-	"github.com/BurntSushi/toml"
 	api "github.com/speedata/publisher-api"
 )
 
-type config struct {
-	ServerAddress string
-	Username      string
-}
-
 func dothings() error {
 	var err error
-	cfg := config{}
-	_, err = toml.DecodeFile("config.toml", &cfg)
-	if err != nil {
-		log.Fatal(err)
-	}
 
-	ep, err := api.NewEndpoint(cfg.Username, cfg.ServerAddress)
+	ep, err := api.NewEndpoint("username", "https://api.speedata.de")
 	if err != nil {
 		return err
 	}
@@ -38,17 +28,40 @@ func dothings() error {
 	p := ep.NewPublishRequest()
 	p.AttachFile(filepath.Join("sample", "layout.xml"))
 	p.AttachFile(filepath.Join("sample", "data.xml"))
-	fmt.Println("Now sending data to the server")
+	fmt.Println("-> Now sending data to the server")
 	resp, err := ep.Publish(p)
 	if err != nil {
 		return err
 	}
-	fmt.Println("Getting the PDF")
-	b, err := resp.GetPDF()
+
+	fmt.Println("-> Getting the status of our publishing run")
+	ps, err := resp.Status()
 	if err != nil {
 		return err
 	}
-	err = ioutil.WriteFile("out.pdf", b, 0644)
+	if ps.Finished != nil {
+		fmt.Println("PDF done", ps.Errors, "errors occured")
+		for _, e := range ps.Errormessages {
+			fmt.Println("*  message", e.Error)
+		}
+	} else {
+		fmt.Println("PDF not finished yet")
+	}
+
+	fmt.Println("-> Waiting for the PDF to get written.")
+	ps, err = resp.Wait()
+	fmt.Println("PDF done", ps.Errors, "errors occured. Finished at", ps.Finished.Format(time.Stamp))
+	for _, e := range ps.Errormessages {
+		fmt.Println("*  message", e.Error)
+	}
+
+	fmt.Println("-> Getting the PDF")
+	f, err := os.Create("out.pdf")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	err = resp.GetPDF(f)
 	if err != nil {
 		return err
 	}
@@ -58,6 +71,13 @@ func dothings() error {
 func main() {
 	err := dothings()
 	if err != nil {
+		if apierror, ok := err.(api.APIError); ok {
+			fmt.Println("API error", apierror.ErrorType)
+			fmt.Println("Instance", apierror.Instance)
+			fmt.Println("Title", apierror.Title)
+			fmt.Println("Detail", apierror.Detail)
+			fmt.Println("Request ID", apierror.RequestID)
+		}
 		log.Fatal(err)
 	}
 }
