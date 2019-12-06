@@ -12,10 +12,6 @@ import (
 	"time"
 )
 
-const (
-	API_PREFIX string = "/v0"
-)
-
 func basicAuth(username string) string {
 	auth := username + ":"
 	return base64.StdEncoding.EncodeToString([]byte(auth))
@@ -48,22 +44,27 @@ type PublishFile struct {
 // PublishResponse holds the id to the publishing process
 type PublishResponse struct {
 	endpoint *Endpoint
-	Id       string
+	ID       string
 }
 
+// Errormessage contains a message from the publisher together with its error code
 type Errormessage struct {
 	Code  int    `json:"code"`
 	Error string `json:"error"`
 }
 
+// ProcessStatus contains information about the current status of the PDF generation.
+// If the Finished field is nil, Errors and Errormessages are not set.
 type ProcessStatus struct {
 	Finished      *time.Time
 	Errors        int
 	Errormessages []Errormessage
 }
 
+// Status returns the status of the publishing run. If the process is still running, the
+// Finished field is set to nil.
 func (p *PublishResponse) Status() (*ProcessStatus, error) {
-	loc := p.endpoint.location + "/status/" + p.Id
+	loc := p.endpoint.location + "/status/" + p.ID
 	req, err := http.NewRequest("GET", loc, nil)
 	if err != nil {
 		return nil, err
@@ -90,9 +91,9 @@ func (p *PublishResponse) Status() (*ProcessStatus, error) {
 
 // Wait for the publishing process to finish. Return an error if something is wrong with the request.
 // If there is an error during the publishing run but the request itself is without errors, the
-// error is nil, but the returned publishing status has the numbers of errors et.
+// error is nil, but the returned publishing status has the numbers of errors set.
 func (p *PublishResponse) Wait() (*ProcessStatus, error) {
-	loc := p.endpoint.location + "/wait/" + p.Id
+	loc := p.endpoint.location + "/wait/" + p.ID
 	req, err := http.NewRequest("GET", loc, nil)
 	if err != nil {
 		return nil, err
@@ -120,7 +121,7 @@ func (p *PublishResponse) Wait() (*ProcessStatus, error) {
 // GetPDF gets the PDF from the server. In case of an error, the byte slice might not be meaningful.
 // Otherwise it holds the PDF file.
 func (p *PublishResponse) GetPDF(w io.Writer) error {
-	loc := p.endpoint.location + "/pdf/" + p.Id
+	loc := p.endpoint.location + "/pdf/" + p.ID
 	req, err := http.NewRequest("GET", loc, nil)
 	if err != nil {
 		return err
@@ -165,7 +166,7 @@ func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 
 	if resp.StatusCode != 201 {
 		fmt.Println(string(buf))
-		var ae APIError
+		var ae Error
 		err = json.Unmarshal(buf, &ae)
 		if err != nil {
 			return p, err

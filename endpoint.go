@@ -2,6 +2,10 @@ package api
 
 import "net/http"
 
+const (
+	apiPrefix string = "/v0"
+)
+
 // Endpoint is the starting point for all
 // publishing activity
 type Endpoint struct {
@@ -14,7 +18,7 @@ type Endpoint struct {
 func NewEndpoint(authstring string, location string) (*Endpoint, error) {
 	ep := &Endpoint{
 		client:   &http.Client{},
-		location: location + API_PREFIX,
+		location: location + apiPrefix,
 		password: basicAuth(authstring),
 	}
 

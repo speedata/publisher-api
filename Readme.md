@@ -71,7 +71,7 @@ func dothings() error {
 func main() {
 	err := dothings()
 	if err != nil {
-		if apierror, ok := err.(api.APIError); ok {
+		if apierror, ok := err.(api.Error); ok {
 			fmt.Println("API error", apierror.ErrorType)
 			fmt.Println("Instance", apierror.Instance)
 			fmt.Println("Title", apierror.Title)
