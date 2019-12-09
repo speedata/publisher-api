@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+var (
+	// ErrNotFound is returned on a 404
+	ErrNotFound error = fmt.Errorf("Ressource not found")
+)
+
 func basicAuth(username string) string {
 	auth := username + ":"
 	return base64.StdEncoding.EncodeToString([]byte(auth))
@@ -104,10 +109,20 @@ func (p *PublishResponse) Wait() (*ProcessStatus, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	buf, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+	switch resp.StatusCode {
+	case 422:
+		var ae Error
+		err = json.Unmarshal(buf, &ae)
+		if err != nil {
+			return nil, err
+		}
+		return nil, ae
+	case 404:
+		return nil, ErrNotFound
 	}
 
 	ps := &ProcessStatus{}
@@ -115,6 +130,7 @@ func (p *PublishResponse) Wait() (*ProcessStatus, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return ps, nil
 }
 
@@ -165,7 +181,6 @@ func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 	}
 
 	if resp.StatusCode != 201 {
-		fmt.Println(string(buf))
 		var ae Error
 		err = json.Unmarshal(buf, &ae)
 		if err != nil {
