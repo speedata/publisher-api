@@ -1,6 +1,10 @@
-# Sample API library for speedata Publisher service // Go
+[![Go Reference](https://pkg.go.dev/badge/github.com/speedata/publisher-api.svg)](https://pkg.go.dev/github.com/speedata/publisher-api)
 
-This Go library connects to the speedata api (still in closed beta) and gets PDF from the server.
+
+# Sample API library for speedata Publisher PDF generation service // Go
+
+This Go library connects to the speedata api and gets PDF from the server. See https://doc.speedata.de/publisher/en/saasapi/ for a description of the API.
+
 
 ## Example usage
 
@@ -14,18 +18,38 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/BurntSushi/toml"
 	api "github.com/speedata/publisher-api"
 )
 
+type config struct {
+	ServerAddress string
+	Username      string
+}
+
 func dothings() error {
 	var err error
+	cfg := config{}
+	_, err = toml.DecodeFile("clientconfig.toml", &cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	ep, err := api.NewEndpoint("username", "https://api.speedata.de")
+	ep, err := api.NewEndpoint(cfg.Username, cfg.ServerAddress)
 	if err != nil {
 		return err
 	}
-
 	p := ep.NewPublishRequest()
+
+	// If you need a different specific version, you can check the availability
+	// here:
+	// versions, err := ep.AvailableVersions()
+	// if err != nil {
+	//    return err
+	// }
+	// and set the required version
+	// p.Version = versions[0]
+
 	p.AttachFile(filepath.Join("sample", "layout.xml"))
 	p.AttachFile(filepath.Join("sample", "data.xml"))
 	fmt.Println("-> Now sending data to the server")
@@ -50,6 +74,10 @@ func dothings() error {
 
 	fmt.Println("-> Waiting for the PDF to get written.")
 	ps, err = resp.Wait()
+	if err != nil {
+		return err
+	}
+
 	fmt.Println("PDF done", ps.Errors, "errors occured. Finished at", ps.Finished.Format(time.Stamp))
 	for _, e := range ps.Errormessages {
 		fmt.Println("*  message", e.Error)
@@ -83,5 +111,3 @@ func main() {
 }
 ```
 
-
-Expect changes. This is the very first draft.

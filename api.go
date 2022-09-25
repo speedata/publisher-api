@@ -14,7 +14,7 @@ import (
 
 var (
 	// ErrNotFound is returned on a 404
-	ErrNotFound error = fmt.Errorf("Ressource not found")
+	ErrNotFound error = fmt.Errorf("Resource not found")
 )
 
 func basicAuth(username string) string {
@@ -25,6 +25,7 @@ func basicAuth(username string) string {
 // PublishRequest is
 type PublishRequest struct {
 	endpoint *Endpoint
+	Version  string
 	Files    []PublishFile `json:"files"`
 }
 
@@ -52,29 +53,31 @@ type PublishResponse struct {
 	ID       string
 }
 
-// Errormessage contains a message from the publisher together with its error code
+// Errormessage contains a message from the publisher together with its error
+// code
 type Errormessage struct {
 	Code  int    `json:"code"`
 	Error string `json:"error"`
 }
 
-// ProcessStatus contains information about the current status of the PDF generation.
-// If the Finished field is nil, Errors and Errormessages are not set.
+// ProcessStatus contains information about the current status of the PDF
+// generation. If the Finished field is nil, Errors and Errormessages are not
+// set.
 type ProcessStatus struct {
 	Finished      *time.Time
 	Errors        int
 	Errormessages []Errormessage
 }
 
-// Status returns the status of the publishing run. If the process is still running, the
-// Finished field is set to nil.
+// Status returns the status of the publishing run. If the process is still
+// running, the Finished field is set to nil.
 func (p *PublishResponse) Status() (*ProcessStatus, error) {
 	loc := p.endpoint.location + "/status/" + p.ID
 	req, err := http.NewRequest("GET", loc, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", "Basic "+p.endpoint.password)
+	req.SetBasicAuth(p.endpoint.password, "")
 
 	resp, err := p.endpoint.client.Do(req)
 	if err != nil {
@@ -94,16 +97,17 @@ func (p *PublishResponse) Status() (*ProcessStatus, error) {
 	return ps, nil
 }
 
-// Wait for the publishing process to finish. Return an error if something is wrong with the request.
-// If there is an error during the publishing run but the request itself is without errors, the
-// error is nil, but the returned publishing status has the numbers of errors set.
+// Wait for the publishing process to finish. Return an error if something is
+// wrong with the request. If there is an error during the publishing run but
+// the request itself is without errors, the error is nil, but the returned
+// publishing status has the numbers of errors set.
 func (p *PublishResponse) Wait() (*ProcessStatus, error) {
 	loc := p.endpoint.location + "/wait/" + p.ID
 	req, err := http.NewRequest("GET", loc, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Add("Authorization", "Basic "+p.endpoint.password)
+	req.SetBasicAuth(p.endpoint.password, "")
 
 	resp, err := p.endpoint.client.Do(req)
 	if err != nil {
@@ -134,15 +138,15 @@ func (p *PublishResponse) Wait() (*ProcessStatus, error) {
 	return ps, nil
 }
 
-// GetPDF gets the PDF from the server. In case of an error, the byte slice might not be meaningful.
-// Otherwise it holds the PDF file.
+// GetPDF gets the PDF from the server. In case of an error, the byte slice
+// might not be meaningful. Otherwise it holds the PDF file.
 func (p *PublishResponse) GetPDF(w io.Writer) error {
 	loc := p.endpoint.location + "/pdf/" + p.ID
 	req, err := http.NewRequest("GET", loc, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Add("Authorization", "Basic "+p.endpoint.password)
+	req.SetBasicAuth(p.endpoint.password, "")
 
 	resp, err := p.endpoint.client.Do(req)
 	if err != nil {
@@ -155,7 +159,8 @@ func (p *PublishResponse) GetPDF(w io.Writer) error {
 // Publish sends data to the server.
 func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 	var p PublishResponse
-	loc := e.location + "/publish"
+	loc := e.location + "/publish?version=" + data.Version
+
 	b, err := json.Marshal(data)
 	if err != nil {
 		return p, err
@@ -164,10 +169,9 @@ func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 
 	req, err := http.NewRequest("POST", loc, br)
 	if err != nil {
-		fmt.Println("new request failed")
 		return p, err
 	}
-	req.Header.Add("Authorization", "Basic "+e.password)
+	req.SetBasicAuth(e.password, "")
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := e.client.Do(req)
@@ -198,10 +202,12 @@ func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 	return p, nil
 }
 
-// NewPublishRequest is the base structure to start a publishing request to the endpoint.
+// NewPublishRequest is the base structure to start a publishing request to the
+// endpoint.
 func (e *Endpoint) NewPublishRequest() *PublishRequest {
 	p := &PublishRequest{
 		endpoint: e,
+		Version:  "latest",
 	}
 	return p
 }
