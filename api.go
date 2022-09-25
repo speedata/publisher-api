@@ -22,14 +22,17 @@ func basicAuth(username string) string {
 	return base64.StdEncoding.EncodeToString([]byte(auth))
 }
 
-// PublishRequest is
+// PublishRequest is an instance to send data to a server and get a PDF. One
+// Endpoint can have multiple PublishingRequests.
 type PublishRequest struct {
 	endpoint *Endpoint
 	Version  string
 	Files    []PublishFile `json:"files"`
 }
 
-// AttachFile adds a file to the PublishRequest
+// AttachFile adds a file to the PublishRequest for the server. Usually you have
+// to provide the layout and the data file. All assets (fonts, images) can be
+// referenced by http(s) hyperlinks.
 func (p *PublishRequest) AttachFile(pathToFile string) error {
 	filename := filepath.Base(pathToFile)
 	data, err := ioutil.ReadFile(pathToFile)
@@ -41,20 +44,21 @@ func (p *PublishRequest) AttachFile(pathToFile string) error {
 	return nil
 }
 
-// PublishFile is a file for the publishing request
+// PublishFile is a file for the publishing request.
 type PublishFile struct {
 	Filename string `json:"filename"`
 	Contents []byte `json:"contents"`
 }
 
-// PublishResponse holds the id to the publishing process
+// PublishResponse holds the id to the publishing process.
 type PublishResponse struct {
 	endpoint *Endpoint
 	ID       string
 }
 
 // Errormessage contains a message from the publisher together with its error
-// code
+// code. The error message is a message from the publishing run (like image not
+// found).
 type Errormessage struct {
 	Code  int    `json:"code"`
 	Error string `json:"error"`
@@ -138,8 +142,8 @@ func (p *PublishResponse) Wait() (*ProcessStatus, error) {
 	return ps, nil
 }
 
-// GetPDF gets the PDF from the server. In case of an error, the byte slice
-// might not be meaningful. Otherwise it holds the PDF file.
+// GetPDF gets the PDF from the server. In case of an error, the bytes written to w
+// might not contain a valid PDF.
 func (p *PublishResponse) GetPDF(w io.Writer) error {
 	loc := p.endpoint.location + "/pdf/" + p.ID
 	req, err := http.NewRequest("GET", loc, nil)
@@ -152,6 +156,9 @@ func (p *PublishResponse) GetPDF(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf(resp.Status)
+	}
 	_, err = io.Copy(w, resp.Body)
 	return err
 }
@@ -160,7 +167,6 @@ func (p *PublishResponse) GetPDF(w io.Writer) error {
 func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 	var p PublishResponse
 	loc := e.location + "/publish?version=" + data.Version
-
 	b, err := json.Marshal(data)
 	if err != nil {
 		return p, err
@@ -183,7 +189,6 @@ func (e *Endpoint) Publish(data *PublishRequest) (PublishResponse, error) {
 	if err != nil {
 		return p, err
 	}
-
 	if resp.StatusCode != 201 {
 		var ae Error
 		err = json.Unmarshal(buf, &ae)
